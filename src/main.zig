@@ -25,10 +25,15 @@ pub fn dumpSolutions(alloc: *std.mem.Allocator) !void {
     }
 }
 
-
 pub fn main() anyerror!void {
     var defaultAllocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = defaultAllocator.deinit();
     const alloc = &defaultAllocator.allocator;
     try dumpSolutions(alloc);
+}
+
+test "all days" {
+    inline for (days) |day| {
+        _ = day;
+    }
 }
