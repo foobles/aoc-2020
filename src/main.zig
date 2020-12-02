@@ -12,13 +12,12 @@ const days = [_]type{
 };
 
 pub fn dumpSolutions(alloc: *std.mem.Allocator) !void {
-    const stdout = io.getStdOut();
-    defer stdout.close();
+    const stdout = io.getStdOut().writer();
     inline for (days) |day, i| {
-        try fmt.format(stdout.writer(), "Day {}:\n", .{i + 1});
+        try fmt.format(stdout, "Day {}:\n", .{i + 1});
         const solution = try day.solve(alloc);
         inline for (meta.fields(@TypeOf(solution))) |field| {
-            try fmt.format(stdout.writer(), "\t{} = {}\n", .{
+            try fmt.format(stdout, "\t{} = {}\n", .{
                 field.name,
                 @field(solution, field.name),
             });
