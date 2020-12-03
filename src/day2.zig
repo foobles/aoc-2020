@@ -1,14 +1,67 @@
 const std = @import("std");
+const file_util = @import("file_util.zig");
 const mem = std.mem;
 const ascii = std.ascii;
 
 const Allocator = std.mem.Allocator;
 
-const Solution = struct { count: usize };
+const Solution = struct { range_valid_count: usize, placement_valid_count: usize };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    var x = Parser{ .str = "453 world" };
-    return Solution{ .count = try x.unsigned(usize) };
+    const password_file = try file_util.getDayFile(alloc, 2, "passwords.txt");
+    defer password_file.close();
+    const file_reader = std.io.bufferedReader(password_file.reader()).reader();
+
+    var line_buf: [256]u8 = undefined;
+    var range_valid_count: usize = 0;
+    var placement_valid_count: usize = 0;
+    while (try file_util.readLine(file_reader, &line_buf)) |line| {
+        const rule = try parseLine(line);
+        if (rule.isRangeCountValid()) {
+            range_valid_count += 1;
+        }
+        if (rule.isPlacementValid()) {
+            placement_valid_count += 1;
+        }
+    }
+    return Solution{
+        .range_valid_count = range_valid_count,
+        .placement_valid_count = placement_valid_count,
+    };
+}
+
+const Rule = struct {
+    first_n: usize,
+    second_n: usize,
+    char: u8,
+    string: []const u8,
+
+    fn isRangeCountValid(self: Rule) bool {
+        const count = mem.count(u8, self.string, &[_]u8{self.char});
+        return self.first_n <= count and count <= self.second_n;
+    }
+
+    fn isPlacementValid(self: Rule) bool {
+        return (self.string[self.first_n - 1] == self.char) !=
+            (self.string[self.second_n - 1] == self.char);
+    }
+};
+
+fn parseLine(line: []const u8) Parser.ParseError!Rule {
+    var parser = Parser{ .str = line };
+    const first_n = try parser.unsigned(usize);
+    try parser.expectString("-");
+    const second_n = try parser.unsigned(usize);
+    try parser.expectString(" ");
+    const char = try parser.advance();
+    try parser.expectString(": ");
+
+    return Rule{
+        .first_n = first_n,
+        .second_n = second_n,
+        .char = char,
+        .string = parser.remaining(),
+    };
 }
 
 const Parser = struct {
@@ -30,12 +83,14 @@ const Parser = struct {
         }
     }
 
-    fn expect(self: *Parser, any_of: []const u8) ParseError!u8 {
-        const next = try self.advance();
-        return if (mem.indexOfScalar(u8, any_of, next) != null)
-            next
+    fn expectString(self: *Parser, string: []const u8) ParseError!void {
+        if (self.str.len < string.len)
+            return error.NoCharacter;
+
+        if (mem.eql(u8, self.str[0..string.len], string))
+            self.str = self.str[string.len..]
         else
-            error.UnexpectedCharacter;
+            return error.UnexpectedCharacter;
     }
 
     fn unsigned(self: *Parser, comptime T: type) ParseError!T {
@@ -75,16 +130,20 @@ test "parse next empty" {
     expectEqual(p.advance(), error.NoCharacter);
 }
 
-test "expect success" {
-    var p = Parser{ .str = "it" };
-    expectEqual(p.expect("bdi"), 'i');
-    expectEqual(p.expect("ght"), 't');
-    expectEqual(p.advance(), error.NoCharacter);
+test "expect str" {
+    var p = Parser { .str = "hello world" };
+    try p.expectString("hello");
+    expectEqualSlices(u8, p.remaining(), " world");
 }
 
-test "expect fail" {
-    var p = Parser{ .str = "it" };
-    expectEqual(p.expect("12345"), error.UnexpectedCharacter);
+test "expect str not enough characters" {
+    var p = Parser { .str = "cup" };
+    expectEqual(p.expectString("cupholder"), error.NoCharacter);
+}
+
+test "expect str wrong characters" {
+    var p = Parser { .str = "help" };
+    expectEqual(p.expectString("felt"), error.UnexpectedCharacter);
 }
 
 test "parse number with eof" {
@@ -107,4 +166,22 @@ test "parse number fail no digits" {
 test "parse number fail empty string" {
     var p = Parser{ .str = "" };
     expectEqual(p.unsigned(i32), error.NoCharacter);
+}
+
+test "parse rule" {
+    const line = "5-10 h: asdfashdfa";
+    const rule = try parseLine(line);
+    expectEqual(rule.first_n, 5);
+    expectEqual(rule.second_n, 10);
+    expectEqual(rule.char, 'h');
+    expectEqualSlices(u8, rule.string, "asdfashdfa");
+}
+
+test "parse rule" {
+    const line = "545-10232 h: asdfashdfa";
+    const rule = try parseLine(line);
+    expectEqual(rule.first_n, 545);
+    expectEqual(rule.second_n, 10232);
+    expectEqual(rule.char, 'h');
+    expectEqualSlices(u8, rule.string, "asdfashdfa");
 }
