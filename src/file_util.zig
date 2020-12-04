@@ -6,18 +6,15 @@ const mem = std.mem;
 const ascii = std.ascii;
 
 const File = fs.File;
-const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
 pub fn readLine(input: anytype, buf: []u8) !?[]const u8 {
-    const raw_line =
-        (try input.readUntilDelimiterOrEof(buf, '\n')) orelse return null;
+    const raw_line = (try input.readUntilDelimiterOrEof(buf, '\n')) orelse return null;
     return mem.trim(u8, raw_line, &ascii.spaces);
 }
 
 pub fn getDayFile(alloc: *Allocator, day: u8, filename: []const u8) !File {
-    var path_buf = ArrayList(u8).init(alloc);
-    defer path_buf.deinit();
-    try fmt.format(path_buf.writer(), "data/day{}/{}", .{day, filename});
-    return fs.cwd().openFile(path_buf.items, .{});
+    var path_buf = try fmt.allocPrint(alloc, "data/day{}/{}", .{ day, filename });
+    defer alloc.free(path_buf);
+    return fs.cwd().openFile(path_buf, .{});
 }
