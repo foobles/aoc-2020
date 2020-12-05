@@ -72,8 +72,8 @@ const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
 
 test "parse rule" {
-    const line = "545-10232 h: asdfashdfa";
-    const rule = try parseLine(line);
+    var state = ParseState { .str = "545-10232 h: asdfashdfa" };
+    const rule = try (ParseRule { .context = {}}).run(&state);
     expectEqual(rule.first_n, 545);
     expectEqual(rule.second_n, 10232);
     expectEqual(rule.char, 'h');

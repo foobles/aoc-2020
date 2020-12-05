@@ -84,10 +84,16 @@ pub fn expectString(string: []const u8) ExpectString {
     return .{ .context = string };
 }
 
+pub fn fnParser(
+    context: anytype,
+    comptime T: type,
+    comptime f: fn(@TypeOf(context), *ParseState) ParseError!T
+) Parser(@TypeOf(context), T, f) {
+    return .{ .context = context };
+}
 
 const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
-
 
 test "parse next" {
     var p = ParseState{ .str = "hello" };
@@ -139,4 +145,22 @@ test "parse number fail no digits" {
 test "parse number fail empty string" {
     var p = ParseState{ .str = "" };
     expectEqual(unsigned(i32).run(&p), error.EndOfStream);
+}
+
+test "fnParser" {
+    var state = ParseState { .str = "hello" };
+    const ctx: []const u8 = &[2]u8{'h', 'e'};
+    const parser = fnParser(ctx, [4]u8, struct {
+        fn run(context: []const u8, s: *ParseState) ParseError![4]u8 {
+            var ret = std.mem.zeroes([4]u8);
+            var i: usize = 0;
+            while (s.advance()) |c| : (i += 1) {
+                if (i == ret.len) break;
+                ret[i] = c;
+                if (std.mem.indexOfScalar(u8, ctx, c) == null)  break;
+            } else |_| {}
+            return ret;
+        }
+    }.run);
+    expectEqual(parser.run(&state), [_]u8{'h', 'e', 'l', 0});
 }
