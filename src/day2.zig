@@ -2,9 +2,10 @@ const std = @import("std");
 const file_util = @import("file_util.zig");
 const mem = std.mem;
 const ascii = std.ascii;
+const parse = @import("parse.zig");
 
+const ParseState = parse.ParseState;
 const Allocator = std.mem.Allocator;
-const Parser = @import("parser.zig").Parser;
 
 const Solution = struct { range_valid_count: usize, placement_valid_count: usize };
 
@@ -17,7 +18,8 @@ pub fn solve(alloc: *Allocator) !Solution {
     var range_valid_count: usize = 0;
     var placement_valid_count: usize = 0;
     while (try file_util.readLine(file_reader, &line_buf)) |line| {
-        const rule = try parseLine(line);
+        var state = ParseState{ .str = line };
+        const rule = try (ParseRule{.context = {}}).run(&state);
         if (rule.isRangeCountValid()) {
             range_valid_count += 1;
         }
@@ -48,22 +50,23 @@ const Rule = struct {
     }
 };
 
-fn parseLine(line: []const u8) Parser.ParseError!Rule {
-    var parser = Parser{ .str = line };
-    const first_n = try parser.unsigned(usize);
-    try parser.expectString("-");
-    const second_n = try parser.unsigned(usize);
-    try parser.expectString(" ");
-    const char = try parser.advance();
-    try parser.expectString(": ");
+const ParseRule = parse.Parser(void, Rule, struct {
+    fn run(_: void, state: *ParseState) parse.ParseError!Rule {
+        const first_n = try parse.unsigned(usize).run(state);
+        try parse.expectString("-").run(state);
+        const second_n = try parse.unsigned(usize).run(state);
+        try parse.expectString(" ").run(state);
+        const char = try state.advance();
+        try parse.expectString(": ").run(state);
 
-    return Rule{
-        .first_n = first_n,
-        .second_n = second_n,
-        .char = char,
-        .string = parser.remaining(),
-    };
-}
+        return Rule{
+            .first_n = first_n,
+            .second_n = second_n,
+            .char = char,
+            .string = state.remaining(),
+        };
+    }
+}.run);
 
 const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
