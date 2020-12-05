@@ -10,10 +10,22 @@ pub fn Parser(
     return struct {
         context: Context,
 
-        const Output = ParseOutput;
+        pub const Self = @This();
+        pub const Output = ParseOutput;
 
-        pub fn run(self: @This(), state: *ParseState) ParseError!ParseOutput {
+        pub fn run(self: Self, state: *ParseState) ParseError!ParseOutput {
             return runFn(self.context, state);
+        }
+
+        pub fn runSafe(self: Self, state: *ParseState) ParseError!ParseOutput {
+            var new_state = state.*;
+            const ret = try runFn(self.context, &new_state);
+            state.* = new_state;
+            return ret;
+        }
+
+        pub fn repeat(self: Self, state: *ParseState) Repeat(Self) {
+            return .{ .inner = self, .state = state };
         }
     };
 }
@@ -84,12 +96,33 @@ pub fn expectString(string: []const u8) ExpectString {
     return .{ .context = string };
 }
 
-pub fn fnParser(
-    context: anytype,
-    comptime T: type,
-    comptime f: fn(@TypeOf(context), *ParseState) ParseError!T
-) Parser(@TypeOf(context), T, f) {
+pub fn fnParser(context: anytype, comptime T: type, comptime f: fn (@TypeOf(context), *ParseState) ParseError!T) Parser(@TypeOf(context), T, f) {
     return .{ .context = context };
+}
+
+pub const ExpectChar = Parser([]const u8, u8, struct {
+    fn run(chars: []const u8, state: *ParseState) ParseError!u8 {
+        const c = try state.advance();
+        return if (mem.indexOfScalar(u8, chars, c) != null)
+            c 
+        else 
+            error.UnexpectedToken;
+    }
+}.run);
+
+pub fn expectChar(chars: []const u8) ExpectChar {
+    return .{ .context = chars };
+}
+
+pub fn Repeat(comptime Inner: type) type {
+    return struct {
+        inner: Inner,
+        state: *ParseState,
+
+        pub fn next(self: @This()) ?Inner.Output {
+            return self.inner.runSafe(self.state) catch null;
+        }
+    };
 }
 
 const expectEqual = std.testing.expectEqual;
@@ -125,6 +158,19 @@ test "expect str wrong characters" {
     expectEqual(expectString("felt").run(&p), error.UnexpectedToken);
 }
 
+test "expect char" {
+    var p = ParseState{ .str = "abc" };
+    expectEqual(expectChar("ab").run(&p), 'a');
+    expectEqual(expectChar("ab").run(&p), 'b');
+    expectEqual(expectChar("ab").run(&p), error.UnexpectedToken);
+}
+
+test "expect char no input" {
+    var p = ParseState {.str = "a" };
+    expectEqual(expectChar("a").run(&p), 'a');
+    expectEqual(expectChar("a").run(&p), error.EndOfStream);
+}
+
 test "parse number with eof" {
     var p = ParseState{ .str = "123" };
     expectEqual(unsigned(i32).run(&p), 123);
@@ -148,8 +194,8 @@ test "parse number fail empty string" {
 }
 
 test "fnParser" {
-    var state = ParseState { .str = "hello" };
-    const ctx: []const u8 = &[2]u8{'h', 'e'};
+    var state = ParseState{ .str = "hello" };
+    const ctx: []const u8 = &[2]u8{ 'h', 'e' };
     const parser = fnParser(ctx, [4]u8, struct {
         fn run(context: []const u8, s: *ParseState) ParseError![4]u8 {
             var ret = std.mem.zeroes([4]u8);
@@ -157,10 +203,32 @@ test "fnParser" {
             while (s.advance()) |c| : (i += 1) {
                 if (i == ret.len) break;
                 ret[i] = c;
-                if (std.mem.indexOfScalar(u8, ctx, c) == null)  break;
+                if (std.mem.indexOfScalar(u8, ctx, c) == null) break;
             } else |_| {}
             return ret;
         }
     }.run);
-    expectEqual(parser.run(&state), [_]u8{'h', 'e', 'l', 0});
+    expectEqual(parser.run(&state), [_]u8{ 'h', 'e', 'l', 0 });
+}
+
+test "repeat" {
+    var state = ParseState{ .str = "HelloHelloHelloGoodbye" };
+    const iter = expectString("Hello").repeat(&state);
+    var i: usize = 0;
+    while (iter.next()) |_| {
+        i += 1;
+    }
+    expectEqual(i, 3);
+    expectEqualSlices(u8, state.remaining(), "Goodbye");
+}
+
+test "run safe" {
+    var state = ParseState{.str = "aaabbb" };
+
+    const parser = expectChar("a");
+    expectEqual(parser.runSafe(&state), 'a');
+    expectEqual(parser.runSafe(&state), 'a');
+    expectEqual(parser.runSafe(&state), 'a');
+    expectEqual(parser.runSafe(&state), error.UnexpectedToken);
+    expectEqualSlices(u8, state.remaining(), "bbb");
 }
