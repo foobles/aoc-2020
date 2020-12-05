@@ -9,42 +9,56 @@ pub const ParseError = error{
 
 pub const ParseState = struct {
     str: []const u8,
+    err: ?ParseError = null,
+
+    pub fn setError(self: *ParseState, err: ParseError) error {ParseError} {
+        self.err = err;
+        return error.ParseError;
+    }
 
     pub fn remaining(self: ParseState) []const u8 {
         return self.str;
     }
 
-    pub fn advance(self: *ParseState) ParseError!u8 {
+    pub fn advance(self: *ParseState) !u8 {
         if (self.str.len > 0) {
             const ret = self.str[0];
             self.str = self.str[1..];
             return ret;
         } else {
-            return error.EndOfStream;
+            return self.setError(error.EndOfStream);
         }
     }
 
-    pub fn expectCharPred(self: *ParseState, comptime pred: fn(u8) bool) ParseError!u8 {
+    pub fn expectCharPred(self: *ParseState, comptime pred: fn (u8) bool) !u8 {
         const c = try self.advance();
-        return if (pred(c)) 
-            c 
-        else 
-            error.UnexpectedToken; 
+        return if (pred(c))
+            c
+        else
+            self.setError(error.UnexpectedToken);
     }
 
-    pub fn expectString(self: *ParseState, string: []const u8) ParseError!void {
+    pub fn expectChar(self: *ParseState, chars: []const u8) !u8 {
+        const c = try self.advance();
+        return if (mem.indexOfScalar(u8, chars, c) != null)
+            c
+        else
+            self.setError(error.UnexpectedToken);
+    }
+
+    pub fn expectString(self: *ParseState, string: []const u8) !void {
         if (self.str.len < string.len)
-            return error.EndOfStream;
+            return self.setError(error.EndOfStream);
 
         if (mem.eql(u8, self.str[0..string.len], string))
             self.str = self.str[string.len..]
-        else
-            return error.UnexpectedToken;
+        else 
+            return self.setError(error.UnexpectedToken);
     }
 
-    pub fn unsigned(self: *ParseState, comptime T: type) ParseError!T {
-        if (self.str.len == 0)
-            return error.EndOfStream;
+    pub fn unsigned(self: *ParseState, comptime T: type) !T {
+        if (self.str.len == 0) 
+            return self.setError(error.EndOfStream);
 
         var ret: T = 0;
         const idx = for (self.str) |cur, i| {
@@ -52,7 +66,7 @@ pub const ParseState = struct {
                 ret *= 10;
                 ret += @intCast(T, cur - '0');
             } else if (i == 0)
-                return error.UnexpectedToken
+                return self.setError(error.UnexpectedToken)
             else
                 break i;
         } else
@@ -61,14 +75,14 @@ pub const ParseState = struct {
         return ret;
     }
 
-    pub fn run_safe(self: *ParseState, comptime f: anytype, args: anytype) ParseError!ParseFnReturnType(f) {
+    pub fn run_safe(self: *ParseState, comptime f: anytype, args: anytype) !ParseFnReturnType(f) {
         var new_state = self.*;
         const ret = try new_state.run(f, args);
         self.* = new_state;
         return ret;
     }
 
-    pub fn run(self: *ParseState, comptime f: anytype, args: anytype) ParseError!ParseFnReturnType(f) {
+    pub fn run(self: *ParseState, comptime f: anytype, args: anytype) !ParseFnReturnType(f) {
         return @call(.{}, f, .{self} ++ args);
     }
 
@@ -76,30 +90,40 @@ pub const ParseState = struct {
         return .{ .state = self, .context = args };
     }
 
-    pub fn bytesUntil(self: *ParseState, comptime f: anytype, args: anytype) struct {
-        skipped: []const u8,
-        val: ?ParseFnReturnType(f),
-    } {
+    pub fn bytesUntil(self: *ParseState, comptime f: anytype, args: anytype) !BytesUntil(f) {
         for (self.str) |_, i| {
             var substate = ParseState{ .str = self.str[i..] };
             if (substate.run_safe(f, args)) |x| {
                 const skipped = self.str[0..i];
                 self.str = substate.str;
-                return .{ .skipped = skipped, .val = x };
-            } else |_| {}
+                return BytesUntil{ .skipped = skipped, .val = x };
+            } else |e| switch (e) {
+                error.ParseError => {},
+                else => return e,
+            }
         }
         self.str = "";
-        return .{ .skipped = self.str, .val = null };
+        return BytesUntil{ .skipped = self.str, .val = null };
     }
 };
+
+pub fn BytesUntil(comptime f: anytype) type {
+    return struct {
+        skipped: []const u8,
+        val: ?ParseFnReturnType(f),
+    };
+}
 
 pub fn Repeat(comptime f: anytype, comptime ArgT: type) type {
     return struct {
         state: *ParseState,
         context: ArgT,
 
-        pub fn next(self: @This()) ?ParseFnReturnType(f) {
-            return self.state.run_safe(f, self.context) catch null;
+        pub fn next(self: @This()) !?ParseFnReturnType(f) {
+            return self.state.run_safe(f, self.context) catch |e| switch (e) {
+                error.ParseError => null,
+                else => e,
+            };
         }
     };
 }

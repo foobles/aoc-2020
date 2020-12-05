@@ -50,7 +50,7 @@ const Rule = struct {
     }
 };
 
-fn parseRule(state: *ParseState) parse.ParseError!Rule {
+fn parseRule(state: *ParseState) !Rule {
     const first_n = try state.unsigned(usize);
     try state.expectString("-");
     const second_n = try state.unsigned(usize);
