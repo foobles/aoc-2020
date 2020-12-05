@@ -53,6 +53,17 @@ pub const ParseState = struct {
     }
 };
 
+// TODO Tests 
+pub const Any = Parser(void, u8, struct {
+    fn run(_: void, state: *ParseState) ParseError!u8 {
+        return state.advance();
+    }
+}.run);
+
+pub fn any() Any {
+    return .{ .context = {} };
+}
+
 pub fn Unsigned(comptime T: type) type {
     return Parser(void, T, struct {
         fn run(_context: void, state: *ParseState) ParseError!T {
