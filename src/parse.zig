@@ -96,14 +96,19 @@ pub const ParseState = struct {
             if (substate.run_safe(f, args)) |x| {
                 const skipped = self.str[0..i];
                 self.str = substate.str;
-                return BytesUntil{ .skipped = skipped, .val = x };
+                return BytesUntil(f){ .skipped = skipped, .val = x };
             } else |e| switch (e) {
                 error.ParseError => {},
                 else => return e,
             }
         }
         self.str = "";
-        return BytesUntil{ .skipped = self.str, .val = null };
+        return BytesUntil(f){ .skipped = self.str, .val = null };
+    }
+
+    pub fn skipWhitespace(self: *ParseState) !void {
+        const iter = self.repeat(ParseState.expectChar, .{&ascii.spaces});
+        while (try iter.next()) |_| {}
     }
 };
 
@@ -121,7 +126,7 @@ pub fn Repeat(comptime f: anytype, comptime ArgT: type) type {
 
         pub fn next(self: @This()) !?ParseFnReturnType(f) {
             return self.state.run_safe(f, self.context) catch |e| switch (e) {
-                error.ParseError => null,
+                error.ParseError => return null,
                 else => e,
             };
         }
@@ -129,7 +134,7 @@ pub fn Repeat(comptime f: anytype, comptime ArgT: type) type {
 }
 
 fn ParseFnReturnType(comptime f: anytype) type {
-    return @typeInfo(@typeInfo(@TypeOf(f)).Fn.returnType.?).ErrorUnion.payload;
+    return @typeInfo(@typeInfo(@TypeOf(f)).Fn.return_type.?).ErrorUnion.payload;
 }
 
 const expectEqual = std.testing.expectEqual;
