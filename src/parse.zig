@@ -9,10 +9,11 @@ pub const ParseError = error{
 
 pub const ParseState = struct {
     str: []const u8,
-    err: ?ParseError = null,
+    err: ?anyerror = null,
 
-    pub fn setError(self: *ParseState, err: ParseError) error {ParseError} {
-        self.err = err;
+    pub fn parseError(self: *ParseState, err: ?anyerror) error{ParseError} {
+        if (err) |e|
+            self.err = e;
         return error.ParseError;
     }
 
@@ -26,7 +27,7 @@ pub const ParseState = struct {
             self.str = self.str[1..];
             return ret;
         } else {
-            return self.setError(error.EndOfStream);
+            return self.parseError(error.EndOfStream);
         }
     }
 
@@ -35,7 +36,7 @@ pub const ParseState = struct {
         return if (pred(c))
             c
         else
-            self.setError(error.UnexpectedToken);
+            self.parseError(error.UnexpectedToken);
     }
 
     pub fn expectChar(self: *ParseState, chars: []const u8) !u8 {
@@ -43,30 +44,33 @@ pub const ParseState = struct {
         return if (mem.indexOfScalar(u8, chars, c) != null)
             c
         else
-            self.setError(error.UnexpectedToken);
+            self.parseError(error.UnexpectedToken);
     }
 
     pub fn expectString(self: *ParseState, string: []const u8) !void {
         if (self.str.len < string.len)
-            return self.setError(error.EndOfStream);
+            return self.parseError(error.EndOfStream);
 
         if (mem.eql(u8, self.str[0..string.len], string))
             self.str = self.str[string.len..]
-        else 
-            return self.setError(error.UnexpectedToken);
+        else
+            return self.parseError(error.UnexpectedToken);
     }
 
     pub fn unsigned(self: *ParseState, comptime T: type) !T {
-        if (self.str.len == 0) 
-            return self.setError(error.EndOfStream);
+        if (self.str.len == 0)
+            return self.parseError(error.EndOfStream);
 
         var ret: T = 0;
         const idx = for (self.str) |cur, i| {
             if (ascii.isDigit(cur)) {
-                ret *= 10;
-                ret += @intCast(T, cur - '0');
+                if (@mulWithOverflow(T, ret, 10, &ret))
+                    return self.parseError(error.LiteralTooLarge);
+
+                if (@addWithOverflow(T, ret, @intCast(T, cur - '0'), &ret))
+                    return self.parseError(error.LiteralTooLarge);
             } else if (i == 0)
-                return self.setError(error.UnexpectedToken)
+                return self.parseError(error.UnexpectedToken)
             else
                 break i;
         } else
