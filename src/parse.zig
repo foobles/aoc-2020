@@ -79,9 +79,12 @@ pub const ParseState = struct {
         return ret;
     }
 
-    pub fn run_safe(self: *ParseState, comptime f: anytype, args: anytype) !ParseFnReturnType(f) {
+    pub fn runSafe(self: *ParseState, comptime f: anytype, args: anytype) !?ParseFnReturnType(f) {
         var new_state = self.*;
-        const ret = try new_state.run(f, args);
+        const ret = new_state.run(f, args) catch |e| switch (e) {
+            error.ParseError => return null,
+            else => return e,
+        };
         self.* = new_state;
         return ret;
     }
@@ -97,13 +100,10 @@ pub const ParseState = struct {
     pub fn bytesUntil(self: *ParseState, comptime f: anytype, args: anytype) !BytesUntil(f) {
         for (self.str) |_, i| {
             var substate = ParseState{ .str = self.str[i..] };
-            if (substate.run_safe(f, args)) |x| {
+            if (try substate.runSafe(f, args)) |x| {
                 const skipped = self.str[0..i];
                 self.str = substate.str;
                 return BytesUntil(f){ .skipped = skipped, .val = x };
-            } else |e| switch (e) {
-                error.ParseError => {},
-                else => return e,
             }
         }
         self.str = "";
@@ -129,10 +129,7 @@ pub fn Repeat(comptime f: anytype, comptime ArgT: type) type {
         context: ArgT,
 
         pub fn next(self: @This()) !?ParseFnReturnType(f) {
-            return self.state.run_safe(f, self.context) catch |e| switch (e) {
-                error.ParseError => return null,
-                else => e,
-            };
+            return self.state.runSafe(f, self.context);
         }
     };
 }

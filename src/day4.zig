@@ -94,11 +94,11 @@ fn parseEntry(state: *ParseState, output: *Passport) !u8 {
         return 1 << 2;
     } else if (mem.eql(u8, key, "hgt")) {
         const n = try state.unsigned(u16);
-        output.hgt = if (state.run_safe(ParseState.expectString, .{"cm"})) |_|
+        output.hgt = if (try state.runSafe(ParseState.expectString, .{"cm"})) |_|
             .{ .Cm = n }
-        else |_| if (state.run_safe(ParseState.expectString, .{"in"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"in"})) |_|
             .{ .In = n }
-        else |_|
+        else
             return state.parseError(error.InvalidHeight);
         return 1 << 3;
     } else if (mem.eql(u8, key, "hcl")) {
@@ -108,21 +108,21 @@ fn parseEntry(state: *ParseState, output: *Passport) !u8 {
         output.hcl[2] = try parseHexByte(state);
         return 1 << 4;
     } else if (mem.eql(u8, key, "ecl")) {
-        output.ecl = if (state.run_safe(ParseState.expectString, .{"amb"})) |_|
+        output.ecl = if (try state.runSafe(ParseState.expectString, .{"amb"})) |_|
             EyeColor.Amb
-        else |_| if (state.run_safe(ParseState.expectString, .{"blu"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"blu"})) |_|
             EyeColor.Blu
-        else |_| if (state.run_safe(ParseState.expectString, .{"brn"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"brn"})) |_|
             EyeColor.Brn
-        else |_| if (state.run_safe(ParseState.expectString, .{"gry"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"gry"})) |_|
             EyeColor.Gry
-        else |_| if (state.run_safe(ParseState.expectString, .{"grn"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"grn"})) |_|
             EyeColor.Grn
-        else |_| if (state.run_safe(ParseState.expectString, .{"hzl"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"hzl"})) |_|
             EyeColor.Hzl
-        else |_| if (state.run_safe(ParseState.expectString, .{"oth"})) |_|
+        else if (try state.runSafe(ParseState.expectString, .{"oth"})) |_|
             EyeColor.Oth
-        else |_|
+        else
             return state.parseError(error.InvalidEyeColor);
         return 1 << 5;
     } else if (mem.eql(u8, key, "pid")) {
