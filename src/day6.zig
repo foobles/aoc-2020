@@ -11,17 +11,14 @@ pub const Solution = struct {
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    const answer_file = try file_util.getDayFile(alloc, 6, "answers.txt");
-    defer answer_file.close();
-    const file_reader = std.io.bufferedReader(answer_file.reader()).reader();
+    var answer_lines = try file_util.dayFileLines(alloc, 6, "answers.txt");
+    defer answer_lines.deinit();
 
     var any_sum: usize = 0;
     var all_sum: usize = 0;
     var answers = mem.zeroes([26]usize);
     var people: usize = 0;
-
-    var buf: [256]u8 = undefined;
-    while (try file_util.readLine(file_reader, &buf)) |line| {
+    while (try answer_lines.next()) |line| {
         if (line.len > 0) {
             for (line) |c| {
                 answers[c - 'a'] += 1;

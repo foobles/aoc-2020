@@ -31,15 +31,13 @@ const Solution = struct {
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    const data_file = try file_util.getDayFile(alloc, 1, "expense_report.txt");
-    defer data_file.close();
-
-    const file_reader = std.io.bufferedReader(data_file.reader()).reader();
+    var data_lines = try file_util.dayFileLines(alloc, 1, "expense_report.txt");
+    defer data_lines.deinit();
+    
     var nums = std.ArrayList(i32).init(alloc);
     defer nums.deinit();
 
-    var buf: [256]u8 = undefined;
-    while (try file_util.readLine(file_reader, &buf)) |line| {
+    while (try data_lines.next()) |line| {
         try nums.append(try std.fmt.parseInt(i32, line, 10));
     }
 

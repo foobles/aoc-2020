@@ -10,14 +10,12 @@ const Allocator = std.mem.Allocator;
 const Solution = struct { range_valid_count: usize, placement_valid_count: usize };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    const password_file = try file_util.getDayFile(alloc, 2, "passwords.txt");
-    defer password_file.close();
-    const file_reader = std.io.bufferedReader(password_file.reader()).reader();
+    var password_lines = try file_util.dayFileLines(alloc, 2, "passwords.txt");
+    defer password_lines.deinit();
 
-    var line_buf: [256]u8 = undefined;
     var range_valid_count: usize = 0;
     var placement_valid_count: usize = 0;
-    while (try file_util.readLine(file_reader, &line_buf)) |line| {
+    while (try password_lines.next()) |line| {
         var state = ParseState{ .str = line };
         const rule = try parseRule(&state);
         if (rule.isRangeCountValid()) {

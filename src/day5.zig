@@ -10,14 +10,12 @@ pub const Solution = struct {
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    const seat_file = try file_util.getDayFile(alloc, 5, "seats.txt");
-    defer seat_file.close();
-    const file_reader = std.io.bufferedReader(seat_file.reader()).reader();
+    var seat_lines = try file_util.dayFileLines(alloc, 5, "seats.txt");
+    defer seat_lines.deinit();
 
     var highest: u16 = 0;
     var filled_seats = PackedIntArray(u1, 1024).init(std.mem.zeroes([1024]u1));
-    var line_buf: [256]u8 = undefined;
-    while (try file_util.readLine(file_reader, &line_buf)) |line| {
+    while (try seat_lines.next()) |line| {
         var cur: u16 = 0;
         for (line) |c, i| {
             if (c == 'B' or c == 'R') {
