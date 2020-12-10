@@ -77,9 +77,8 @@ fn parsePassport(state: *ParseState) !Passport {
 
 fn parseEntry(state: *ParseState, output: *Passport) !u8 {
     try state.skipWhitespace();
-    const untilColon = try state.bytesUntil(ParseState.expectChar, .{": "});
-    if (untilColon.val != @as(u8, ':'))
-        return state.parseError(null);
+    const untilColon = (try state.skipUntil(ParseState.expectChar, .{":"}))
+        orelse return state.parseError(null);
 
     const key = untilColon.skipped;
     var ret: u8 = undefined;
@@ -132,7 +131,7 @@ fn parseEntry(state: *ParseState, output: *Passport) !u8 {
             return state.parseError(error.InvalidIdLen);
         return 1 << 6;
     } else if (mem.eql(u8, key, "cid")) {
-        _ = try state.bytesUntil(ParseState.expectChar, .{" \n"});
+        _ = try state.skipUntil(ParseState.expectChar, .{" \n"});
         return 1 << 7; // unused
     }
     return state.parseError(error.InvalidKey);

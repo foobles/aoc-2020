@@ -97,17 +97,16 @@ pub const ParseState = struct {
         return .{ .state = self, .context = args };
     }
 
-    pub fn bytesUntil(self: *ParseState, comptime f: anytype, args: anytype) !BytesUntil(f) {
+    pub fn skipUntil(self: *ParseState, comptime f: anytype, args: anytype) !?SkipUntil(f) {
         for (self.str) |_, i| {
             var substate = ParseState{ .str = self.str[i..] };
             if (try substate.runSafe(f, args)) |x| {
                 const skipped = self.str[0..i];
                 self.str = substate.str;
-                return BytesUntil(f){ .skipped = skipped, .val = x };
+                return SkipUntil(f){ .skipped = skipped, .val = x };
             }
         }
-        self.str = "";
-        return BytesUntil(f){ .skipped = self.str, .val = null };
+        return null;
     }
 
     pub fn skipWhitespace(self: *ParseState) !void {
@@ -116,10 +115,10 @@ pub const ParseState = struct {
     }
 };
 
-pub fn BytesUntil(comptime f: anytype) type {
+pub fn SkipUntil(comptime f: anytype) type {
     return struct {
         skipped: []const u8,
-        val: ?ParseFnReturnType(f),
+        val: ParseFnReturnType(f),
     };
 }
 
