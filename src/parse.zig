@@ -57,6 +57,15 @@ pub const ParseState = struct {
             return self.parseError(error.UnexpectedToken);
     }
 
+    pub fn signed(self: *ParseState, comptime T: type) !T {
+        var sign: T = 1;
+        if (try self.runSafe(ParseState.expectChar, .{"+-"})) |c| {
+            if (c == '-')
+                sign = -1;
+        }
+        return (try self.unsigned(T)) * sign;
+    }
+
     pub fn unsigned(self: *ParseState, comptime T: type) !T {
         if (self.str.len == 0)
             return self.parseError(error.EndOfStream);
