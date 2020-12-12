@@ -11,7 +11,8 @@ const ParseState = parse.ParseState;
 const assert = std.debug.assert;
 
 pub const Solution = struct {
-    gold_contained_by: usize
+    gold_contained_by: usize,
+    gold_contains: usize,
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
@@ -24,12 +25,13 @@ pub fn solve(alloc: *Allocator) !Solution {
     var rule_map_contained_by = RuleMap.init(alloc);
     defer rule_map_contained_by.deinit();
     while (try bag_lines.next()) |line| {
-        var state = ParseState { .str = line };
+        var state = ParseState{ .str = line };
         try parseRule(&state, &rule_map_contains, &rule_map_contained_by);
     }
 
     return Solution{
-        .gold_contained_by = try rule_map_contained_by.count_contain("shiny gold"),
+        .gold_contained_by = try rule_map_contained_by.count_contain("shiny gold", .{.track_repeats = true}),
+        .gold_contains = try rule_map_contains.count_contain("shiny gold", .{.track_repeats = false}),
     };
 }
 
@@ -39,7 +41,7 @@ fn parseRule(state: *ParseState, map_contains: *RuleMap, map_contained_by: *Rule
     var bag_contents = state.repeat(parseBagContent, .{});
     while (try bag_contents.next()) |content| {
         try map_contains.insert_content(rule_name, content.name, content.count);
-        try map_contained_by.insert_content(content.name, rule_name, content.count);
+        try map_contained_by.insert_content(content.name, rule_name, 1);
     }
 }
 
@@ -49,7 +51,6 @@ fn parseBagContent(state: *ParseState) !RuleMap.BagData {
     try state.skipWhitespace();
     const name = ((try state.skipUntil(ParseState.expectString, .{" bag"})) orelse return state.parseError(error.BagContentNoName)).skipped;
     _ = try state.skipUntil(ParseState.expectString, .{", "});
-
 
     return RuleMap.BagData{
         .name = name,
@@ -93,36 +94,46 @@ const RuleMap = struct {
             if (!res.found_existing) {
                 errdefer _ = self.map.remove(name);
                 res.entry.key = try self.alloc.dupe(u8, name);
-                res.entry.value = .{}; 
+                res.entry.value = .{};
             }
             break :blk &res.entry.value;
         };
 
-        try content_arr.append(self.alloc, .{.name = owned_content_name, .count = count});
+        try content_arr.append(self.alloc, .{ .name = owned_content_name, .count = count });
     }
 
-    fn count_contain(self: RuleMap, name: []const u8) !usize {
-        var used_string_map = StringHashMapUnmanaged(void).init(self.alloc);
-        defer used_string_map.deinit(self.alloc);
-        
-        var data_list: [256][]const u8 = undefined;
-        var new_list: [256][]const u8 = undefined;
-        data_list[0] = name;
+    fn count_contain(self: RuleMap, name: []const u8, comptime options: anytype) !usize {
+        const track_repeats: bool = options.track_repeats;
+        const StringSet = StringHashMapUnmanaged(void);
+        var used_string_map: StringSet = if (track_repeats)
+            StringSet.init(self.alloc)
+        else 
+            undefined;
+        defer if (track_repeats) used_string_map.deinit(self.alloc);
+
+        var data_list: [256]BagData = undefined;
+        var new_list: [256]BagData = undefined;
+        data_list[0] = .{ .name = name, .count = 1 };
         var len: usize = 1;
         var ret: usize = 0;
 
         while (len > 0) {
             var new_len: usize = 0;
             for (data_list[0..len]) |data| {
-                const arr = self.map.get(data) orelse return error.NoBag;
+                const arr = self.map.get(data.name) orelse return error.NoBag;
                 for (arr.items) |s| {
-                    var string_used = try used_string_map.getOrPut(self.alloc, s.name);
-                    if (!string_used.found_existing) {
-                        string_used.entry.value = {};
-                        ret += 1;
+                    const should_count = if (track_repeats) blk: {
+                        const gpe = try used_string_map.getOrPut(self.alloc, s.name);
+                        break :blk !gpe.found_existing;
+                    } else 
+                        true;
+
+                    if (should_count) {
+                        ret += s.count * data.count;
 
                         assert(new_len < 256);
-                        new_list[new_len] = s.name;
+                        new_list[new_len] = s;
+                        new_list[new_len].count *= data.count;
                         new_len += 1;
                     }
                 }
