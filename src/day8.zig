@@ -18,6 +18,7 @@ pub fn solve(alloc: *Allocator) !Solution {
     defer inst_arr.deinit();
 
     var lines = try file_util.dayFileLines(alloc, 8, "prog.txt");
+    defer lines.deinit();
     while (try lines.next()) |line| {
         var state = ParseState{ .str = line };
         try inst_arr.append(try parseLine(&state));
