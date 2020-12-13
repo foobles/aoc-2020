@@ -9,6 +9,7 @@ const AutoHashMap = std.AutoHashMap;
 
 pub const Solution = struct {
     not_sum: u64,
+    weakness: u64,
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
@@ -39,6 +40,7 @@ pub fn solve(alloc: *Allocator) !Solution {
 
     return Solution{
         .not_sum = not_sum,
+        .weakness = findWeakness(stream_data, not_sum).?,
     };
 }
 
@@ -71,6 +73,39 @@ fn findNotSumStep(
         }
     }
     return null;
+}
+
+fn findWeakness(stream: []const u64, invalid: u64) ?u64 {
+    const range = findWeaknessRange(stream, invalid) orelse return null;
+    var min = range[0];
+    var max = range[0];
+    for (range[1..]) |n| {
+        if (n < min) 
+            min = n;
+        if (n > max) 
+            max = n;
+    }
+    return min + max;
+} 
+
+fn findWeaknessRange(stream: []const u64, invalid: u64) ?[]const u64 {
+    var low: usize = 0;
+    var high: usize = 1;
+
+    var cur_sum: u64 = stream[low] + stream[high];
+    while (cur_sum != invalid) {
+        if (cur_sum > invalid) {
+            cur_sum -= stream[low];
+            low += 1;
+        }
+        if (cur_sum < invalid or low == high) {
+            high += 1;
+            if (high == stream.len)
+                return null;
+            cur_sum += stream[high];
+        } 
+    }
+    return stream[low..high+1];
 }
 
 fn getStreamData(alloc: *Allocator) ![]const u64 {
