@@ -15,6 +15,7 @@ const days = [_]type{
     @import("day6.zig"),
     @import("day7.zig"),
     @import("day8.zig"),
+    @import("day9.zig"),
 };
 
 pub fn dumpSolutions(alloc: *std.mem.Allocator) !void {
