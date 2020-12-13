@@ -1,4 +1,3 @@
-
 const std = @import("std");
 const file_util = @import("file_util.zig");
 
@@ -13,7 +12,7 @@ pub const Solution = struct {
 
 pub fn solve(alloc: *Allocator) !Solution {
     const sum_len = 25;
-    
+
     var sum_map = AutoHashMap(u64, usize).init(alloc);
     defer sum_map.deinit();
 
@@ -33,20 +32,20 @@ pub fn solve(alloc: *Allocator) !Solution {
 
     const not_sum = while (try lines.next()) |line| {
         const num = try fmt.parseInt(u64, line, 10);
-        if (try findNotSumStep(&sum_map, &window, cur_idx, num)) |found| 
+        if (try findNotSumStep(&sum_map, &window, cur_idx, num)) |found|
             break found;
         window[cur_idx] = num;
         cur_idx = (cur_idx + 1) % window.len;
     } else null;
 
     return Solution{
-        .not_sum = not_sum.?
+        .not_sum = not_sum.?,
     };
 }
 
 fn findNotSumStep(
-    sum_map: *AutoHashMap(u64, usize), 
-    window: []const u64, 
+    sum_map: *AutoHashMap(u64, usize),
+    window: []const u64,
     cur_idx: usize,
     num: u64,
 ) !?u64 {
@@ -59,7 +58,7 @@ fn findNotSumStep(
             entry.value += 1;
         }
     }
-    
+
     const old_num = window[cur_idx];
     for (window) |other, i| {
         if (i != cur_idx) {
