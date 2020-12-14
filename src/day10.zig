@@ -34,7 +34,7 @@ pub fn solve(alloc: *Allocator) !Solution {
 
 fn countJoltDiffProductAssumeSorted(jolts: []const usize) usize {
     if (jolts.len == 0)
-        return 1;
+        return 0;
 
     var diff_1_count: usize = 0;
     var diff_3_count: usize = 0;
