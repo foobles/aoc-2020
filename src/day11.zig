@@ -4,17 +4,55 @@ const file_util = @import("file_util.zig");
 const mem = std.mem;
 
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 pub const Solution = struct {
     final_seats_occupied: usize,
 };
 
 pub fn solve(alloc: *Allocator) !Solution {
-    var grid = try Grid.init(alloc, 5, 6);
-    defer grid.deinit(alloc);
+    var lines = try file_util.dayFileLines(alloc, 11, "layout.txt");
+    defer lines.deinit();
+
+    var tiles = ArrayList(Grid.Tile).init(alloc);
+    defer tiles.deinit();
+
+    var height: usize = 0;
+    var width: usize = undefined;
+    while (try lines.next()) |line| {
+        if (height == 0) {
+            width = line.len;
+        } else if (line.len != width) {
+            return error.InconsistentWidth;
+        }
+
+        for (line) |c| {
+            try tiles.append(switch (c) {
+                '.' => .Empty,
+                'L' => .{ .Chair = .{ .occupied = false } },
+                else => return error.InvalidMapTile,
+            });
+        }
+
+        height += 1;
+    }
+
+    if (height == 0)
+        return error.NoLines;
+
+    var other_buf = try alloc.alloc(Grid.Tile, width * height);
+    defer alloc.free(other_buf);
+
+    var grid = Grid{
+        .width = width,
+        .height = height,
+        .data = tiles.items,
+    };
+
+    while (grid.step(&other_buf)) {}
 
     return Solution{
-        .final_seats_occupied = 0,
+        .final_seats_occupied = grid.countOccupied(),
     };
 }
 
@@ -27,18 +65,6 @@ const Grid = struct {
         Chair: struct { occupied: bool },
         Empty: void,
     };
-
-    fn init(alloc: *Allocator, width: usize, height: usize) !Grid {
-        return Grid{
-            .width = width,
-            .height = height,
-            .data = try alloc.alloc(Tile, width * height),
-        };
-    }
-
-    fn deinit(self: Grid, alloc: *Allocator) void {
-        alloc.free(self.data);
-    }
 
     fn isInBounds(self: Grid, x: usize, y: usize) bool {
         return (x < self.width and y < self.height);
@@ -80,6 +106,52 @@ const Grid = struct {
             c(self, x, y, -1, 1) +
             c(self, x, y, 0, 1) +
             c(self, x, y, 1, 1);
+    }
+
+    fn countOccupied(self: Grid) usize {
+        var ret: usize = 0;
+        for (self.data) |tile| {
+            switch (tile) {
+                .Chair => |c| if (c.occupied) {
+                    ret += 1;
+                },
+                else => {},
+            }
+        }
+        return ret;
+    }
+
+    fn idxToCoords(self: Grid, idx: usize) struct { x: usize, y: usize } {
+        return .{
+            .x = idx % self.width,
+            .y = idx / self.width,
+        };
+    }
+
+    fn step(self: *Grid, other_buf: *[]Tile) bool {
+        var changed = false;
+        for (self.data) |tile, i| {
+            other_buf.*[i] = switch (tile) {
+                .Empty => .Empty,
+                .Chair => |c| blk: {
+                    const coords = self.idxToCoords(i);
+                    const neighbors = self.countNeighbors(coords.x, coords.y);
+                    const new_chair = Tile{
+                        .Chair = .{
+                            .occupied = if (c.occupied)
+                                neighbors < 4
+                            else
+                                neighbors == 0,
+                        },
+                    };
+                    if (new_chair.Chair.occupied != c.occupied)
+                        changed = true;
+                    break :blk new_chair;
+                },
+            };
+        }
+        mem.swap([]Tile, &self.data, other_buf);
+        return changed;
     }
 };
 
