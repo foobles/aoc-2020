@@ -40,7 +40,7 @@ pub fn solve(alloc: *Allocator) !Solution {
     if (height == 0)
         return error.NoLines;
 
-    var other_buf = try alloc.alloc(Grid.Tile, width * height);
+    const other_buf = try alloc.alloc(Grid.Tile, width * height);
     defer alloc.free(other_buf);
 
     var grid = Grid{
@@ -49,7 +49,11 @@ pub fn solve(alloc: *Allocator) !Solution {
         .data = tiles.items,
     };
 
-    while (grid.step(&other_buf)) {}
+    var buf_double = other_buf;
+    while (grid.step(&buf_double, .{
+        .count_neighbors = Grid.countVisibleNeighbors,
+        .leave_chair_threshold = 5,
+    })) {}
 
     return Solution{
         .final_seats_occupied = grid.countOccupied(),
@@ -96,16 +100,37 @@ const Grid = struct {
         return self.indexOccupants(real_x, real_y);
     }
 
-    fn countNeighbors(self: Grid, x: usize, y: usize) usize {
-        const c = Grid.indexOccupantsAtOffset;
-        return c(self, x, y, -1, -1) +
-            c(self, x, y, 0, -1) +
-            c(self, x, y, 1, -1) +
-            c(self, x, y, -1, 0) +
-            c(self, x, y, 1, 0) +
-            c(self, x, y, -1, 1) +
-            c(self, x, y, 0, 1) +
-            c(self, x, y, 1, 1);
+    fn countAdjacentNeighbors(self: Grid, x: usize, y: usize) usize {
+        var ret: usize = 0;
+        inline for (moore) |offset| {
+            ret += self.indexOccupantsAtOffset(x, y, offset.x, offset.y);
+        }
+        return ret;
+    }
+
+    fn countVisibleNeighbors(self: Grid, x: usize, y: usize) usize {
+        var ret: usize = 0;
+        inline for (moore) |offset| {
+            ret += self.occupantVisibleRay(x, y, offset.x, offset.y);
+        }
+        return ret;
+    }
+
+    fn occupantVisibleRay(self: Grid, x: usize, y: usize, dx: isize, dy: isize) usize {
+        var cur_x = x;
+        var cur_y = y;
+
+        while (true) {
+            cur_x = offsetUsize(cur_x, dx) orelse return 0;
+            cur_y = offsetUsize(cur_y, dy) orelse return 0;
+            if (!self.isInBounds(cur_x, cur_y))
+                return 0;
+
+            switch (self.index(cur_x, cur_y).*) {
+                .Chair => |c| return @boolToInt(c.occupied),
+                .Empty => {},
+            }
+        }
     }
 
     fn countOccupied(self: Grid) usize {
@@ -121,25 +146,25 @@ const Grid = struct {
         return ret;
     }
 
-    fn idxToCoords(self: Grid, idx: usize) struct { x: usize, y: usize } {
+    fn idxToCoords(self: Grid, idx: usize) UVec2 {
         return .{
             .x = idx % self.width,
             .y = idx / self.width,
         };
     }
 
-    fn step(self: *Grid, other_buf: *[]Tile) bool {
+    fn step(self: *Grid, other_buf: *[]Tile, comptime strat: StepStrat) bool {
         var changed = false;
         for (self.data) |tile, i| {
             other_buf.*[i] = switch (tile) {
                 .Empty => .Empty,
                 .Chair => |c| blk: {
                     const coords = self.idxToCoords(i);
-                    const neighbors = self.countNeighbors(coords.x, coords.y);
+                    const neighbors = strat.count_neighbors(self.*, coords.x, coords.y);
                     const new_chair = Tile{
                         .Chair = .{
                             .occupied = if (c.occupied)
-                                neighbors < 4
+                                neighbors < strat.leave_chair_threshold
                             else
                                 neighbors == 0,
                         },
@@ -153,7 +178,28 @@ const Grid = struct {
         mem.swap([]Tile, &self.data, other_buf);
         return changed;
     }
+
+    const StepStrat = struct {
+        count_neighbors: fn (Grid, usize, usize) usize,
+        leave_chair_threshold: usize,
+    };
 };
+
+// zig fmt: off
+const moore = [_]IVec2{
+    .{ .x = -1, .y = -1 },
+    .{ .x =  0, .y = -1 },
+    .{ .x =  1, .y = -1 },
+    .{ .x = -1, .y =  0 },
+    .{ .x =  1, .y =  0 },
+    .{ .x = -1, .y =  1 },
+    .{ .x =  0, .y =  1 },
+    .{ .x =  1, .y =  1 },
+};
+// zig fmt: on
+
+const IVec2 = struct { x: isize, y: isize };
+const UVec2 = struct { x: usize, y: usize };
 
 fn offsetUsize(x: usize, offset: isize) ?usize {
     if (offset >= 0) {
