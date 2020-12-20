@@ -74,30 +74,15 @@ const State = struct {
         }
     }
 
-    
     fn runTrueStep(self: *State, step: Step) void {
         switch (step.kind) {
-            .North => {
-                self.angle.y += step.magnitude;
-            },
-            .East => {
-                self.angle.x += step.magnitude;
-            },
-            .South => {
-                self.angle.y -= step.magnitude;
-            },
-            .West => {
-                self.angle.x -= step.magnitude;
-            },
-            .Forward => {
-                self.pos = self.pos.add(self.angle.mulScalar(step.magnitude));
-            },
-            .Left => {
-                self.angle = self.angle.mulComplex(Vec2.fromAngle(step.magnitude));
-            },
-            .Right => {
-                self.angle = self.angle.mulComplex(Vec2.fromAngle(-step.magnitude));
-            },
+            .North => self.angle.y += step.magnitude,
+            .East => self.angle.x += step.magnitude,
+            .South => self.angle.y -= step.magnitude,
+            .West => self.angle.x -= step.magnitude,
+            .Forward => self.pos = self.pos.add(self.angle.mulScalar(step.magnitude)),
+            .Left => self.angle = self.angle.mulComplex(Vec2.fromAngle(step.magnitude)),
+            .Right => self.angle = self.angle.mulComplex(Vec2.fromAngle(-step.magnitude)),
         }
     }
 
